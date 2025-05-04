@@ -4,14 +4,39 @@ This repository provides a tutorial implementation of conic reformulations for t
 
 ---
 
+## 📦 Installation
+
+To set up the environment:
+
+1. Clone the repository and navigate into the folder.
+2. Create the Conda environment using:
+
+```bash
+conda env create -f environment.yml
+conda activate traffic_assignment
+```
+
+3. You will need to obtain an **academic license** for [MOSEK](https://www.mosek.com/products/academic-licenses/) and install it according to their instructions.
+
+
+---
+
 ## 🚀 How to Run the Code
 
 Run the following commands in your terminal using [Julia](https://julialang.org/):
 
 ```bash
-julia traffic_assignment.jl SiouxFalls MOSEK 1 exponential power 1 original
-julia traffic_assignment.jl Munich MOSEK 1 exponential power 1 original
-julia traffic_assignment.jl Chicago MOSEK 1 exponential power 1 original
+JULIA_NUM_THREADS=2 julia traffic_assignment.jl SiouxFalls MOSEK 1 exponential power 1 original
+JULIA_NUM_THREADS=2 julia traffic_assignment.jl Anaheim MOSEK 0.001 exponential power 1 original
+JULIA_NUM_THREADS=4 julia traffic_assignment.jl EMA MOSEK 100 exponential power 1 original
+JULIA_NUM_THREADS=8 julia traffic_assignment.jl Munich MOSEK 1 exponential power 1 original
+JULIA_NUM_THREADS=8 julia traffic_assignment.jl Chicago MOSEK 1 exponential power 1 original
+```
+
+To run the script with multiple threads (e.g., 4 threads), use the following command:
+
+```bash
+JULIA_NUM_THREADS=4 julia traffic_assignment.jl SiouxFalls MOSEK 1 exponential power 1 original
 ```
 
 ### Arguments
@@ -23,6 +48,8 @@ julia traffic_assignment.jl Chicago MOSEK 1 exponential power 1 original
 5. **Reformulation for Beckmann Equation**: `power`, `socp`  
 6. **Scale Parameter for Beckmann SOCP**: A constant ≥ 1  
 7. **Objective Function**: `original`, `beckmann`, `entropy`
+
+
 
 ---
 
@@ -40,6 +67,7 @@ To determine an appropriate **lambda scale parameter**, solve the problem using 
 ## 📂 Data
 
 The datasets are downloaded from the [TransportationNetworks repository](https://github.com/bstabler/TransportationNetworks) and slightly modified for consistency in data types.
+
 
 ---
 

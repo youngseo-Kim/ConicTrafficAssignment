@@ -1,6 +1,7 @@
 using CSV
 using DataFrames
 using LinearAlgebra
+using PyCall
 
 # This definition is not necessary for traffic assignment with a single transportation mode (private car), 
 # but we include it for ease of future extensions.
@@ -27,12 +28,11 @@ value_of_time = 20 # $/hr
 # Check if there are at least two arguments provided
 dataset = length(ARGS) >= 1 ? ARGS[1] : "SiouxFalls"  # default is SiouxFalls network if not provided
 solver = length(ARGS) >= 2 ? ARGS[2] : "MOSEK"        # default is MOSEK if not provided
-C = length(ARGS) >= 3 ? ARGS[3] : "1" # scaling factor   
-scale_lambda = length(ARGS) >= 4 ? ARGS[4] : "1" # scaling factor   
-entropy_cones = length(ARGS) >= 5 ? ARGS[5] : "exponential" # "relative" or "relative_ver2" 
-beckmann = length(ARGS) >= 6 ? ARGS[6] : "power" # "power" or "socp" 
-is_dual = length(ARGS) >= 7 ? ARGS[7] : "false"  
-objective = length(ARGS) >= 8 ? ARGS[8] : "entropy" # or "beckmann" or "original"  
+scale_lambda = length(ARGS) >= 3 ? ARGS[3] : "1" # scaling factor   
+entropy_cones = length(ARGS) >= 4 ? ARGS[4] : "exponential" # "relative" or "relative_ver2" 
+beckmann = length(ARGS) >= 5 ? ARGS[5] : "power" # "power" or "socp" 
+C = length(ARGS) >= 6 ? ARGS[6] : "1" # scaling factor for Beckmann SOCP   
+objective = length(ARGS) >= 7 ? ARGS[7] : "original" # or "beckmann" or "entropy"  
 
 
 C = parse(Int, C)
@@ -41,11 +41,10 @@ scale_lambda = parse(Float64, scale_lambda)
 # Print the values to verify
 println("Dataset: $dataset")
 println("Solver: $solver")
-println("Scale parameter C: $C")
 println("Scale parameter Lambda: $scale_lambda")
-println("Implementation for entropy cones: $entropy_cones")
+println("Implementation for entropy functions: $entropy_cones")
 println("Implementation for Beckmann: $beckmann")
-println("Is the program dual: $is_dual")
+println("Scale parameter for Beckmann SOCP (C): $C")
 println("Objective function: $objective")
 
 # dataset = "Munich" # "Chicago" #  #"SiouxFalls"  # "Test" #"SiouxFalls" #"Test" #"Chicago" #Note: need to change the parameter in the below
@@ -75,14 +74,9 @@ alpha = 0.15
 beta = 4
 # convert hr to minutes
 t0_am = Dict(((row.init_node, row.term_node), m) => row.free_flow_time for row in eachrow(network_df) for m in m_set)
-
 d_od = Dict((row.O, row.D) => row.Ton for row in eachrow(od_df))
 N = sum(d_od[od] for od in ods)
-
-
 c_a = Dict((row.init_node, row.term_node) => row.capacity/C for row in eachrow(network_df))
-
-
 max_c_a = maximum(values(c_a))
 
 
@@ -91,29 +85,75 @@ using Pandas: read_pickle
 R = read_pickle("../data/$dataset/OD_route.pickle")
 route_length = read_pickle("../data/$dataset/OD_route_length.pickle")
 
-using PyCall
-py"""
-def is_continuous_subsequence(my_tuple, my_list):
-    tuple_length = len(my_tuple)
-    list_length = len(my_list)
+# using PyCall
+# py"""
+# def is_continuous_subsequence(my_tuple, my_list):
+#     tuple_length = len(my_tuple)
+#     list_length = len(my_list)
     
-    for i in range(0, list_length - tuple_length + 1):
-        if tuple(my_list[i:i+tuple_length]) == my_tuple:
-            return True
-    return False
+#     for i in range(0, list_length - tuple_length + 1):
+#         if tuple(my_list[i:i+tuple_length]) == my_tuple:
+#             return True
+#     return False
 
-"""
+# """
+
+# # Access the Python function as if it were a Julia function
+# is_continuous_subsequence = py"is_continuous_subsequence"
+
+using Base.Threads
+
+function is_continuous_subsequence(subseq::Tuple, seq::Vector)
+    n = length(subseq)
+    for i in 1:(length(seq) - n + 1)
+        if Tuple(seq[i:i+n-1]) == subseq
+            return true
+        end
+    end
+    return false
+end
+
+println("Precomputing is_used...")
+
+routes = Dict((od, m) => keys(R[od, m]) for od in ods, m in m_set)
+
+# Thread-safe: one dict per thread
+is_used_temp = [Dict{Tuple{Tuple{Int,Int}, Tuple{Int,Int}, String, Any}, Bool}() for _ in 1:nthreads()]
+
+@time begin
+    @threads for ai in 1:length(A)
+        a = A[ai]
+        tid = threadid()
+        d = is_used_temp[tid]
+
+        for od in ods
+            for m in m_set
+                for r in routes[(od, m)]
+                    d[(a, od, m, r)] = is_continuous_subsequence(a, R[od, m][r])
+                end
+            end
+        end
+    end
+
+    # Merge dictionaries
+    is_used = Dict{Tuple{Tuple{Int,Int}, Tuple{Int,Int}, String, Any}, Bool}()
+    for d in is_used_temp
+        for (k, v) in d
+            is_used[k] = v
+        end
+    end
+end
+
+println("Finished precomputing is_used.")
 
 
-# Access the Python function as if it were a Julia function
-is_continuous_subsequence = py"is_continuous_subsequence"
 
 # delta_a_ijm = Dict()
 # for a in A
 #     for od in ods
 #         for m in m_set
 #             delta_a_ijm[a, od, m] = 0  # Initialize here to ensure every possible key is accounted for
-#             for r in keys(R[od, m])
+#             for r in routes[(od, m)]
 #                 if is_continuous_subsequence(a, R[od, m][r])
 #                     delta_a_ijm[a, od, m] += 1
 #                 end
@@ -125,7 +165,7 @@ is_continuous_subsequence = py"is_continuous_subsequence"
 # PS_ijmr = Dict()
 # for od in ods
 #     for m in m_set
-#         for r in keys(R[od, m])
+#         for r in routes[(od, m)]
 #             PS_ijmr[od, m, r] = 0
 #             # Total length of the route
                 
@@ -208,9 +248,7 @@ model_construction_time = @time begin
     @variable(FS, 0 <= sum_p_ijmr[od in ods, m in m_set, r in keys(R[od, m])] <= 1)
     @variable(FS, 0 <= p_ijmr[od in ods, m in m_set, r in keys(R[od, m])] <= 1)
 
-    if is_dual == "true"
-        @variable(FS, 0 <= theta_dest <= 1)
-    end
+
 
     if entropy_cones == "relative_ver2"
         @variable(FS, 0 <= t_ij) 
@@ -230,11 +268,11 @@ model_construction_time = @time begin
         @constraint(FS, t_ij_lb, sum(t_ij[od] for od in ods) == -sum(d_od[i,j]/N * log(d_od[i,j]/sum(d_od[i, jp] for jp in D if (i,jp) in ods)) for (i,j) in ods if d_od[i,j] > 0)) # observed constraints
     end
 
-
+    demand_sums = Dict(i => sum(d_od[i, j] for j in D if (i,j) in ods) for i in O)
 
   
-    @constraint(FS, [i in O], sum(p_ij[(i,j)] for j in D if (i,j) in ods) == sum(d_od[i, j] for j in D if (i,j) in ods)/N)
-    @constraint(FS, [od in ods], p_ij[od] == sum(p_ijmr[od, m, r] for m in m_set for r in keys(R[od, m])))
+    @constraint(FS, [i in O], sum(p_ij[(i,j)] for j in D if (i,j) in ods) == demand_sums[i]/N)
+    @constraint(FS, [od in ods], p_ij[od] == sum(p_ijmr[od, m, r] for m in m_set for r in routes[(od, m)]))
     
 
  
@@ -267,14 +305,7 @@ model_construction_time = @time begin
     # Objective function
 
     # TODO: write program for dual case
-    if is_dual == "true" # exponential cone 
-        @objective(FS, Max, 
-        - sum(t0_am[a, "m1"] * f_am_bar[a, "m1"] + (t0_am[a, "m1"] * alpha / (c_a[a]^4) / (beta+1)) * s_a[a] for a in A) * C / N 
-        + sum(t_ij[od] for od in ods) * theta_dest
-        + sum(w_ijmr[od, m, r] for od in ods, m in m_set, r in keys(R[od, m])) 
-        )
-
-    elseif entropy_cones == "relative_ver2"
+    if entropy_cones == "relative_ver2"
         @objective(FS, Max, 
         - sum(t0_am[a, "m1"] * f_am_bar[a, "m1"] + (t0_am[a, "m1"] * alpha / (c_a[a]^4) / (beta+1)) * s_a[a] for a in A) * C / N 
         + t_ij
@@ -287,7 +318,6 @@ model_construction_time = @time begin
         if objective == "original"
             @objective(FS, Max, 
             - sum(t0_am[a, "m1"] * f_am_bar[a, "m1"] + (t0_am[a, "m1"] * alpha / (c_a[a]^4) / (beta+1)) * s_a[a] for a in A) * C / N * scale_lambda
-            - sum(t0_am[a,m] * f_am_bar[a, m] for m in ["m2", "m3"] for a in A) * C / N * scale_lambda  # need the right scale
             + sum(t_ij[od] for od in ods)
             + sum(w_ijmr[od, m, r] for od in ods, m in m_set, r in keys(R[od, m])) 
             )
@@ -308,15 +338,11 @@ model_construction_time = @time begin
     end
 
 
-    @constraint(FS, [a in A, m in ["m1"]], f_am_bar[a, m] * C == sum(p_ijmr[od, m, r] for od in ods for r in keys(R[od, m]) if is_continuous_subsequence(a,R[od, m][r])) * N ) #Scaling: use f_am_bar instead of f_am
+    @constraint(FS, [a in A, m in ["m1"]], f_am_bar[a, m] * C == sum(p_ijmr[od, m, r] for od in ods for r in routes[(od, m)] if is_used[(a, od, m, r)]) * N ) #Scaling: use f_am_bar instead of f_am
 
    
 
     if entropy_cones == "relative" # RelativeEntropyCone - final
-        # for od in ods
-        #     (i,_) = od
-        #     @constraint(FS, [-t_ij[od], sum(d_od[i, j] for j in D if (i,j) in ods)/N, p_ij[od]] in MOI.RelativeEntropyCone(3))
-        # end
         @constraint(FS, [od in ods], [-t_ij[od], sum(d_od[first(od), j] for j in D if (first(od), j) in ods)/N, p_ij[od]] in MOI.RelativeEntropyCone(3))
 
         @constraint(FS, [od in ods, m in m_set, r in keys(R[od, m])], sum_p_ijmr[od, m, r] == sum(p_ijmr[od, m, rp] for rp in keys(R[od, m])))
@@ -328,7 +354,7 @@ model_construction_time = @time begin
 
 
         @constraint(FS, [od in ods, m in m_set, r in keys(R[od, m])], sum_p_ijmr[od, m, r] == sum(p_ijmr[od, m, rp] for rp in keys(R[od, m])))
-        @constraint(FS, vcat(-w_ijmr, vec([sum_p_ijmr[od, m, r] for od in ods for m in m_set for r in keys(R[od, m])]), vec([p_ijmr[od, m, r] for od in ods for m in m_set for r in keys(R[od, m])])) in MOI.RelativeEntropyCone(2 * length([0 for od in ods for m in m_set for r in keys(R[od, m])]) + 1))
+        @constraint(FS, vcat(-w_ijmr, vec([sum_p_ijmr[od, m, r] for od in ods for m in m_set for r in routes[(od, m)]]), vec([p_ijmr[od, m, r] for od in ods for m in m_set for r in routes[(od, m)]])) in MOI.RelativeEntropyCone(2 * length([0 for od in ods for m in m_set for r in routes[(od, m)]]) + 1))
 
 
 
@@ -336,7 +362,7 @@ model_construction_time = @time begin
     elseif entropy_cones == "exponential" # exponential cone 
         for od in ods
             (i,_) = od
-            @constraint(FS, [t_ij[od], p_ij[od], sum(d_od[i, j] for j in D if (i,j) in ods)/N] in MOI.ExponentialCone())
+            @constraint(FS, [t_ij[od], p_ij[od], demand_sums[i]/N] in MOI.ExponentialCone())
         end
 
 
@@ -404,14 +430,6 @@ def bpr_func(m, a, flow):
 
     if m == "m1": # road
         return t_0 * (1 + alpha * (flow / capacity)**beta)
-    if m == "m2": # bus
-        return t_0 * bus_speed_factor
-    elif m == "m3": # subway
-        if a in transit_line:
-            return t_0 * subway_speed_factor
-        else:
-            return t_0 * walk_speed_factor
-
 """
 
 
@@ -460,7 +478,7 @@ end
 p_ijmr_dict = Dict()
 for od in ods 
     for m in m_set
-        for r in keys(R[od, m])
+        for r in routes[(od, m)]
             p_ijmr_dict[od, m, r] = p_ijmr_solution[od, m, r]
         end
     end
