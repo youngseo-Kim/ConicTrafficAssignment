@@ -21,7 +21,8 @@ conda activate traffic_assignment
 
 ## Project Structure
 
-1. `data/`: We utilize the transportation benchmark networks obtained from [this source](https://github.com/bstabler/TransportationNetworks). The inputs are standardized, with `NETWORKNAME_net.txt` representing the network links and `NETWORKNAME_od.csv` representing the OD matrix processed from `NETWORKNAME_trips.tntp`. Networks include Sioux Falls, Eastern Massachusetts (EMA), Berlin Friedrichshain, Berlin Mitte, Anaheim, Barcelona, Winnipeg, and Chicago Sketch.
+1. `data/`: We utilize the transportation benchmark networks obtained from [this source](https://github.com/bstabler/TransportationNetworks). The inputs are standardized, with `NETWORKNAME_net.txt` representing the network links and `NETWORKNAME_od.csv` representing the OD matrix processed from `NETWORKNAME_trips.tntp`. Networks include Sioux Falls, Eastern Massachusetts (EMA), Berlin Friedrichshain, Berlin Mitte, Anaheim, Barcelona, Winnipeg, and Chicago Sketch. To download the full data directory with preprocessed files, download and unzip the following directory, and replace the existing `data` directory. [data]https://drive.google.com/file/d/1lavAvhQqSgyFXaFmYS8CVicf8OU5znF7/view?usp=sharing
+
 2. `src/`: Main implementation to build and solve the model. Follow the guidelines for more details. 
     - `candidate_set.py`: Creates the candidate route set and saves the output as `OD_route_ROUTENUMBER.pickle` and `OD_route_length_ROUTENUMBER.pickle`.
     - `preprocessing.ipynb`: Converts the `NETWORKNAME_trips.tntp` file to `NETWORKNAME_od.csv`.
