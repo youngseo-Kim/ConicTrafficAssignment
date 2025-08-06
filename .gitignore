@@ -1,4 +1,14 @@
 log/
+log_backup/
+data/
+# data/Anaheim_backup
+# data/BerlinCenter
+# data/Birmingham
+# data/GoldCoast
+# data/Philadelphia
+# data/Sydney
+# data/Chicago
+models/
 output/
 figures/
-data/Chicago
+src/traffic_assignment_backup.jl

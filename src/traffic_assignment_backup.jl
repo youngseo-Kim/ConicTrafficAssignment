@@ -387,13 +387,6 @@ def bpr_func(m, a, flow):
 
     if m == "m1": # road
         return t_0 * (1 + alpha * (flow / capacity)**beta)
-    if m == "m2": # bus
-        return t_0 * bus_speed_factor
-    elif m == "m3": # subway
-        if a in transit_line:
-            return t_0 * subway_speed_factor
-        else:
-            return t_0 * walk_speed_factor
 
 """
 

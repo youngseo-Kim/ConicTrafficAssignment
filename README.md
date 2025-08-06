@@ -37,7 +37,7 @@ conda activate traffic_assignment
 
 ## 🚀 How to Run the Code
 
-1. Precompute candidate sets. 
+1. Precompute candidate sets. Go to the directory `src/` and run
 
 ```bash
 python candidate_set.py --data_type SiouxFalls --n_routes 3
@@ -47,7 +47,7 @@ python candidate_set.py --data_type EMA --n_routes 3
 
 2. Run the following commands in your terminal using [Julia](https://julialang.org/):
 
-### Example for traffic assignment: 
+### Commands for traffic assignment: 
 
 ```bash
 julia traffic_assignment.jl SiouxFalls MOSEK 1 exponential power 1 original 3  > ../log/SiouxFalls_route3
@@ -68,12 +68,12 @@ julia traffic_assignment.jl EMA MOSEK 1 exponential power 1 original 3 > ../log/
 8. **Number of Candidate Routes**: Typical range would be 2-10
 
 
-### Example for the combined model:
+### Commands for the combined model:
 
 ```bash
-JULIA_NUM_THREADS=4 julia first_stage_scaled.jl SiouxFalls MOSEK first false false 1 1000 exponential power false original > ../log/TDM/SiouxFalls
-JULIA_NUM_THREADS=4 julia first_stage_scaled.jl Anaheim MOSEK first false false 1 0.5 exponential power false original > ../log/TDM/Anaheim
-JULIA_NUM_THREADS=4 julia first_stage_scaled.jl EMA MOSEK first false false 1 7000 exponential power false original > ../log/TDM/EMA 
+JULIA_NUM_THREADS=4 julia first_stage_scaled.jl SiouxFalls MOSEK first false false 1 1000 exponential power original 3 > ../log/TDM/SiouxFalls
+JULIA_NUM_THREADS=4 julia first_stage_scaled.jl Anaheim MOSEK first false false 1 0.5 exponential power original 3 > ../log/TDM/Anaheim
+JULIA_NUM_THREADS=4 julia first_stage_scaled.jl EMA MOSEK first false false 1 7000 exponential power original 3 > ../log/TDM/EMA 
 ```
 
 
@@ -87,9 +87,8 @@ JULIA_NUM_THREADS=4 julia first_stage_scaled.jl EMA MOSEK first false false 1 70
 7. **Scale Parameter for Lambda**: Scales the magnitude of the entropy function and Beckmann equation  
 8. **Reformulation for Entropy Function**: `exponential`, `relative`, `relative_ver2`  
 9. **Reformulation for Beckmann Equation**: `power`, `socp`  
-
-7. **Objective Function**: `original`, `beckmann`, `entropy`
-8. **Number of Candidate Routes**: Typical range would be 2-10
+10. **Objective Function**: `original`, `beckmann`, `entropy`
+11. **Number of Candidate Routes**: Typical range would be 2-10
 
 
 
@@ -106,8 +105,6 @@ To determine an appropriate **lambda scale parameter**, solve the problem using 
 
 ---
 
-
----
 
 ## 👤 Author
 
